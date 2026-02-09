@@ -6,7 +6,6 @@ export type SearchFormValues = {
   condition: string;
   minPrice: string;
   maxPrice: string;
-  minConfidence: string;
   includeTerms: string;
   excludeTerms: string;
   requireUsed: boolean;
@@ -115,22 +114,6 @@ export default function SearchForm({ values, onChange, onSubmit, loading }: Sear
           <option value="price_low">Price low to high</option>
           <option value="price_high">Price high to low</option>
           <option value="confidence_low">Confidence low to high</option>
-        </select>
-      </div>
-      <div className="md:col-span-2">
-        <label className="text-xs font-semibold uppercase tracking-wide text-stone-500">
-          Min confidence
-        </label>
-        <select
-          className="mt-1 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm focus:border-stone-400 focus:outline-none"
-          value={values.minConfidence}
-          onChange={(event) => onChange({ ...values, minConfidence: event.target.value })}
-        >
-          <option value="0">0%</option>
-          <option value="40">40%</option>
-          <option value="60">60%</option>
-          <option value="75">75%</option>
-          <option value="85">85%</option>
         </select>
       </div>
       <div className="md:col-span-6">

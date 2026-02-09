@@ -30,7 +30,6 @@ export async function GET(req: NextRequest) {
       | "refurbished"
       | "for_parts"
       | null;
-    const minConfidence = searchParams.get("minConfidence");
     const requireUsed = searchParams.get("requireUsed");
     const requireBrand = searchParams.get("requireBrand");
     const includeTerms = searchParams.get("includeTerms");
@@ -50,7 +49,6 @@ export async function GET(req: NextRequest) {
       minPrice: minPrice ? Number(minPrice) : undefined,
       maxPrice: maxPrice ? Number(maxPrice) : undefined,
       condition: condition ?? undefined,
-      minConfidence: minConfidence ? Number(minConfidence) : 0,
       requireUsed: parseBoolean(requireUsed, true),
       requireBrand: parseBoolean(requireBrand, true),
       includeTerms: parseTerms(includeTerms),

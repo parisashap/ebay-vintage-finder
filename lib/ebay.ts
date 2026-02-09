@@ -6,7 +6,6 @@ type SearchParams = {
   minPrice?: number;
   maxPrice?: number;
   condition?: "new" | "used" | "refurbished" | "for_parts";
-  minConfidence?: number;
   requireUsed?: boolean;
   requireBrand?: boolean;
   includeTerms?: string[];
@@ -61,6 +60,15 @@ const VINTAGE_NEGATIVE_TERMS = [
   "nwt",
   "fast fashion",
 ];
+
+const BANNED_BRAND_VALUES = new Set([
+  "unbranded",
+  "unknown",
+  "n/a",
+  "na",
+  "none",
+  "no brand",
+]);
 
 function getAuthHeader() {
   const clientId = process.env.EBAY_CLIENT_ID;
@@ -125,12 +133,7 @@ function buildFilter(params: SearchParams): string | undefined {
   return filters.length ? filters.join(",") : undefined;
 }
 
-function readBrand(item: any): string | undefined {
-  const directBrand = item.brand;
-  if (typeof directBrand === "string" && directBrand.trim()) {
-    return directBrand.trim();
-  }
-
+function readBrandFromItemSpecifics(item: any): string | undefined {
   const aspects = Array.isArray(item.localizedAspects) ? item.localizedAspects : [];
   for (const aspect of aspects) {
     if (typeof aspect?.name === "string" && aspect.name.toLowerCase() === "brand") {
@@ -141,6 +144,12 @@ function readBrand(item: any): string | undefined {
   }
 
   return undefined;
+}
+
+function isAllowedBrand(brand: string | undefined): boolean {
+  if (!brand) return false;
+  const normalized = brand.trim().toLowerCase().replace(/\./g, "");
+  return !BANNED_BRAND_VALUES.has(normalized);
 }
 
 function isUsedCondition(condition: string): boolean {
@@ -198,7 +207,7 @@ function normalizeItem(item: any, keyword: string): Listing {
   const priceValue = Number(item.price?.value ?? 0);
   const shippingCost = item.shippingOptions?.[0]?.shippingCost?.value;
   const condition = item.condition ?? "Unknown";
-  const brand = readBrand(item);
+  const brand = readBrandFromItemSpecifics(item);
   const vintageConfidence = rankVintageConfidence(
     {
       title: item.title ?? "",
@@ -266,17 +275,15 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
     ? data.itemSummaries.map((item: any) => normalizeItem(item, params.keyword))
     : [];
 
-  const requireBrand = params.requireBrand ?? true;
+  const requireBrand = true;
   const requireUsed = params.requireUsed ?? true;
-  const minConfidence = Math.max(0, Math.min(100, params.minConfidence ?? 0));
   const includeTerms = params.includeTerms ?? [];
   const excludeTerms = params.excludeTerms ?? [];
   const sortBy = params.sortBy ?? "best_match";
 
   const filteredItems = normalizedItems.filter((item) => {
-    if (requireBrand && !item.brand) return false;
+    if (requireBrand && !isAllowedBrand(item.brand)) return false;
     if (requireUsed && !isUsedCondition(item.condition)) return false;
-    if (item.vintageConfidence < minConfidence) return false;
     if (!matchesIncludeTerms(item, includeTerms)) return false;
     if (matchesExcludeTerms(item, excludeTerms)) return false;
     return true;
