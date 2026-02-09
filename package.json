@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
+    "preflight:vercel": "bash scripts/vercel-preflight.sh",
     "start": "next start",
     "lint": "next lint"
   },

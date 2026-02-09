@@ -1,3 +1,33 @@
+## eBay Vintage Finder
+
+Next.js app that searches eBay Browse API listings.
+
+## Pre-deploy check (recommended)
+
+Run this before pushing/deploying:
+
+```bash
+npm run preflight:vercel
+```
+
+This check validates:
+- `NODE_ENV` is not a non-standard value.
+- Required env vars exist: `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`.
+- Sandbox credentials are paired with `EBAY_ENV=sandbox`.
+- Production build succeeds (`next build --webpack`).
+
+## Vercel env vars
+
+Set these in Vercel Project Settings -> Environment Variables:
+- `EBAY_CLIENT_ID`
+- `EBAY_CLIENT_SECRET`
+- `EBAY_ENV` (set to `sandbox` when using `-SBX-` credentials; otherwise leave unset for production)
+- `EBAY_MARKETPLACE_ID` (optional, default `EBAY_US`)
+
+Do not set `NODE_ENV` manually in Vercel.
+
+---
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
