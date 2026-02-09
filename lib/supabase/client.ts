@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
+//test 
 let browserClient: SupabaseClient | null = null;
 
 export function getSupabaseBrowserClient() {
