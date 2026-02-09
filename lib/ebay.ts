@@ -6,6 +6,12 @@ type SearchParams = {
   minPrice?: number;
   maxPrice?: number;
   condition?: "new" | "used" | "refurbished" | "for_parts";
+  minConfidence?: number;
+  requireUsed?: boolean;
+  requireBrand?: boolean;
+  includeTerms?: string[];
+  excludeTerms?: string[];
+  sortBy?: "best_match" | "price_low" | "price_high" | "confidence_low";
   limit?: number;
   offset?: number;
   marketplaceId?: string;
@@ -30,6 +36,31 @@ const CONDITION_MAP: Record<NonNullable<SearchParams["condition"]>, string> = {
   refurbished: "2000",
   for_parts: "7000",
 };
+
+const VINTAGE_POSITIVE_TERMS = [
+  "vintage",
+  "made in usa",
+  "single stitch",
+  "80s",
+  "90s",
+  "70s",
+  "y2k",
+  "distressed",
+  "faded",
+  "thrashed",
+];
+
+const VINTAGE_NEGATIVE_TERMS = [
+  "repro",
+  "reproduction",
+  "replica",
+  "inspired",
+  "style",
+  "lookalike",
+  "new with tags",
+  "nwt",
+  "fast fashion",
+];
 
 function getAuthHeader() {
   const clientId = process.env.EBAY_CLIENT_ID;
@@ -84,23 +115,107 @@ function buildFilter(params: SearchParams): string | undefined {
     filters.push("priceCurrency:USD");
   }
 
+  const requireUsed = params.requireUsed ?? true;
   if (params.condition) {
     filters.push(`conditionIds:{${CONDITION_MAP[params.condition]}}`);
+  } else if (requireUsed) {
+    filters.push(`conditionIds:{${CONDITION_MAP.used}}`);
   }
 
   return filters.length ? filters.join(",") : undefined;
 }
 
-function normalizeItem(item: any): Listing {
+function readBrand(item: any): string | undefined {
+  const directBrand = item.brand;
+  if (typeof directBrand === "string" && directBrand.trim()) {
+    return directBrand.trim();
+  }
+
+  const aspects = Array.isArray(item.localizedAspects) ? item.localizedAspects : [];
+  for (const aspect of aspects) {
+    if (typeof aspect?.name === "string" && aspect.name.toLowerCase() === "brand") {
+      const values = Array.isArray(aspect.value) ? aspect.value : [];
+      const first = values.find((value: unknown) => typeof value === "string" && value.trim());
+      if (first) return first.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function isUsedCondition(condition: string): boolean {
+  const c = condition.toLowerCase();
+  return c.includes("used") || c.includes("pre-owned") || c.includes("pre owned");
+}
+
+function rankVintageConfidence(item: { title: string; brand?: string; condition: string }, keyword: string) {
+  const haystack = `${item.title} ${item.brand ?? ""}`.toLowerCase();
+  const keywordTokens = keyword
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 2);
+
+  let score = 50;
+
+  if (item.brand?.trim()) score += 12;
+  if (isUsedCondition(item.condition)) score += 10;
+
+  for (const token of keywordTokens) {
+    score += haystack.includes(token) ? 8 : -6;
+  }
+
+  const fullKeyword = keyword.trim().toLowerCase();
+  if (fullKeyword && haystack.includes(fullKeyword)) score += 12;
+
+  let positiveHits = 0;
+  for (const term of VINTAGE_POSITIVE_TERMS) {
+    if (haystack.includes(term)) positiveHits += 1;
+  }
+  score += Math.min(positiveHits, 3) * 6;
+
+  let negativeHits = 0;
+  for (const term of VINTAGE_NEGATIVE_TERMS) {
+    if (haystack.includes(term)) negativeHits += 1;
+  }
+  score -= negativeHits * 12;
+
+  return Math.max(0, Math.min(100, score));
+}
+
+function matchesIncludeTerms(item: Listing, includeTerms: string[]) {
+  if (!includeTerms.length) return true;
+  const haystack = `${item.title} ${item.brand ?? ""}`.toLowerCase();
+  return includeTerms.every((term) => haystack.includes(term.toLowerCase()));
+}
+
+function matchesExcludeTerms(item: Listing, excludeTerms: string[]) {
+  if (!excludeTerms.length) return false;
+  const haystack = `${item.title} ${item.brand ?? ""}`.toLowerCase();
+  return excludeTerms.some((term) => haystack.includes(term.toLowerCase()));
+}
+
+function normalizeItem(item: any, keyword: string): Listing {
   const priceValue = Number(item.price?.value ?? 0);
   const shippingCost = item.shippingOptions?.[0]?.shippingCost?.value;
+  const condition = item.condition ?? "Unknown";
+  const brand = readBrand(item);
+  const vintageConfidence = rankVintageConfidence(
+    {
+      title: item.title ?? "",
+      brand,
+      condition,
+    },
+    keyword,
+  );
 
   return {
     id: item.itemId,
     title: item.title,
     price: Number.isFinite(priceValue) ? priceValue : 0,
     currency: item.price?.currency ?? "USD",
-    condition: item.condition ?? "Unknown",
+    condition,
+    brand,
+    vintageConfidence,
     shipping: shippingCost ? `$${shippingCost} shipping` : undefined,
     image: item.image?.imageUrl ?? item.thumbnailImages?.[0]?.imageUrl,
     url: item.itemWebUrl,
@@ -115,9 +230,12 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
   const marketplaceId = params.marketplaceId || process.env.EBAY_MARKETPLACE_ID || "EBAY_US";
   const token = await getAccessToken();
 
+  const requestedLimit = params.limit ?? 24;
+  const fetchLimit = Math.min(Math.max(requestedLimit * 4, 50), 200);
+
   const query = new URLSearchParams({
     q: params.keyword,
-    limit: String(params.limit ?? 24),
+    limit: String(fetchLimit),
     offset: String(params.offset ?? 0),
   });
 
@@ -144,12 +262,39 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
   }
 
   const data = await res.json();
-  const items = Array.isArray(data.itemSummaries) ? data.itemSummaries.map(normalizeItem) : [];
+  const normalizedItems: Listing[] = Array.isArray(data.itemSummaries)
+    ? data.itemSummaries.map((item: any) => normalizeItem(item, params.keyword))
+    : [];
+
+  const requireBrand = params.requireBrand ?? true;
+  const requireUsed = params.requireUsed ?? true;
+  const minConfidence = Math.max(0, Math.min(100, params.minConfidence ?? 0));
+  const includeTerms = params.includeTerms ?? [];
+  const excludeTerms = params.excludeTerms ?? [];
+  const sortBy = params.sortBy ?? "best_match";
+
+  const filteredItems = normalizedItems.filter((item) => {
+    if (requireBrand && !item.brand) return false;
+    if (requireUsed && !isUsedCondition(item.condition)) return false;
+    if (item.vintageConfidence < minConfidence) return false;
+    if (!matchesIncludeTerms(item, includeTerms)) return false;
+    if (matchesExcludeTerms(item, excludeTerms)) return false;
+    return true;
+  });
+
+  filteredItems.sort((a, b) => {
+    if (sortBy === "price_low") return a.price - b.price || b.vintageConfidence - a.vintageConfidence;
+    if (sortBy === "price_high") return b.price - a.price || b.vintageConfidence - a.vintageConfidence;
+    if (sortBy === "confidence_low") return a.vintageConfidence - b.vintageConfidence || a.price - b.price;
+    return b.vintageConfidence - a.vintageConfidence || a.price - b.price;
+  });
+
+  const items = filteredItems.slice(0, requestedLimit);
 
   return {
-    total: data.total ?? items.length,
+    total: filteredItems.length,
     offset: data.offset ?? params.offset ?? 0,
-    limit: data.limit ?? params.limit ?? 24,
+    limit: params.limit ?? 24,
     items,
   };
 }

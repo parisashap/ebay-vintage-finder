@@ -14,6 +14,14 @@ const defaultValues: SearchFormValues = {
   keyword: "",
   categoryId: "",
   condition: "",
+  minPrice: "",
+  maxPrice: "",
+  minConfidence: "60",
+  includeTerms: "",
+  excludeTerms: "",
+  requireUsed: true,
+  requireBrand: true,
+  sortBy: "best_match",
 };
 
 export default function HomePage() {
@@ -63,10 +71,18 @@ export default function HomePage() {
       keyword: values.keyword,
       limit: String(PAGE_SIZE),
       offset: String(nextOffset),
+      minConfidence: values.minConfidence || "0",
+      requireUsed: String(values.requireUsed),
+      requireBrand: String(values.requireBrand),
+      sortBy: values.sortBy,
     });
 
     if (values.categoryId) params.set("categoryId", values.categoryId);
     if (values.condition) params.set("condition", values.condition);
+    if (values.minPrice) params.set("minPrice", values.minPrice);
+    if (values.maxPrice) params.set("maxPrice", values.maxPrice);
+    if (values.includeTerms.trim()) params.set("includeTerms", values.includeTerms);
+    if (values.excludeTerms.trim()) params.set("excludeTerms", values.excludeTerms);
 
     return params.toString();
   };

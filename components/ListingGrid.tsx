@@ -47,7 +47,11 @@ export default function ListingGrid({
             <div className="text-sm font-semibold text-stone-900">
               {item.currency} {item.price.toFixed(2)}
             </div>
+            <div className="text-xs text-stone-600">Brand: {item.brand ?? "Unknown"}</div>
             <div className="text-xs text-stone-600">Condition: {item.condition}</div>
+            <div className="text-xs text-emerald-700">
+              Vintage confidence: {item.vintageConfidence}%
+            </div>
             {item.shipping && <div className="text-xs text-stone-500">{item.shipping}</div>}
             <div className="mt-auto flex items-center justify-between gap-2">
               <a

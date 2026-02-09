@@ -4,6 +4,8 @@ export type Listing = {
   price: number;
   currency: string;
   condition: string;
+  brand?: string;
+  vintageConfidence: number;
   shipping?: string;
   image?: string;
   url: string;
