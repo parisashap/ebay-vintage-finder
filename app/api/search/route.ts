@@ -3,19 +3,6 @@ import { searchEbay } from "@/lib/ebay";
 
 export const runtime = "nodejs";
 
-function parseBoolean(value: string | null, defaultValue: boolean) {
-  if (value === null) return defaultValue;
-  return value.toLowerCase() === "true";
-}
-
-function parseTerms(value: string | null) {
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((term) => term.trim())
-    .filter(Boolean);
-}
-
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -30,16 +17,6 @@ export async function GET(req: NextRequest) {
       | "refurbished"
       | "for_parts"
       | null;
-    const requireUsed = searchParams.get("requireUsed");
-    const requireBrand = searchParams.get("requireBrand");
-    const includeTerms = searchParams.get("includeTerms");
-    const excludeTerms = searchParams.get("excludeTerms");
-    const sortBy = searchParams.get("sortBy") as
-      | "best_match"
-      | "price_low"
-      | "price_high"
-      | "confidence_low"
-      | null;
     const limit = searchParams.get("limit");
     const offset = searchParams.get("offset");
 
@@ -49,11 +26,6 @@ export async function GET(req: NextRequest) {
       minPrice: minPrice ? Number(minPrice) : undefined,
       maxPrice: maxPrice ? Number(maxPrice) : undefined,
       condition: condition ?? undefined,
-      requireUsed: parseBoolean(requireUsed, true),
-      requireBrand: parseBoolean(requireBrand, true),
-      includeTerms: parseTerms(includeTerms),
-      excludeTerms: parseTerms(excludeTerms),
-      sortBy: sortBy ?? "best_match",
       limit: limit ? Number(limit) : 24,
       offset: offset ? Number(offset) : 0,
     });
