@@ -12,8 +12,15 @@ const PAGE_SIZE = 24;
 
 const defaultValues: SearchFormValues = {
   keyword: "",
+  brand: "",
+  gender: "",
   maxPrice: "",
   condition: "",
+  size: "",
+  color: "",
+  material: "",
+  era: "",
+  sortBy: "best_match",
 };
 
 export default function HomePage() {
@@ -23,7 +30,8 @@ export default function HomePage() {
   const [values, setValues] = useState<SearchFormValues>(defaultValues);
   const [items, setItems] = useState<Listing[]>([]);
   const [total, setTotal] = useState(0);
-  const [offset, setOffset] = useState(0);
+  const [currentOffset, setCurrentOffset] = useState(0);
+  const [hasMoreResults, setHasMoreResults] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
@@ -58,33 +66,41 @@ export default function HomePage() {
     loadFavorites(user.id);
   }, [loadFavorites, user]);
 
-  const buildQuery = (nextOffset: number) => {
+  const buildQuery = (targetOffset: number) => {
     const params = new URLSearchParams({
       keyword: values.keyword,
       limit: String(PAGE_SIZE),
-      offset: String(nextOffset),
+      offset: String(targetOffset),
     });
 
     if (values.maxPrice) params.set("maxPrice", values.maxPrice);
+    if (values.brand.trim()) params.set("brand", values.brand.trim());
+    if (values.gender) params.set("gender", values.gender);
     if (values.condition) params.set("condition", values.condition);
+    if (values.size.trim()) params.set("size", values.size.trim());
+    if (values.color.trim()) params.set("color", values.color.trim());
+    if (values.material.trim()) params.set("material", values.material.trim());
+    if (values.era) params.set("era", values.era);
+    params.set("sortBy", values.sortBy);
 
     return params.toString();
   };
 
-  const runSearch = async (nextOffset: number, append: boolean) => {
+  const runSearch = async (targetOffset: number) => {
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch(`/api/search?${buildQuery(nextOffset)}`);
+      const res = await fetch(`/api/search?${buildQuery(targetOffset)}`);
       if (!res.ok) {
         const errorBody = await res.json().catch(() => ({}));
         throw new Error(errorBody.error || "Search failed");
       }
       const data = (await res.json()) as SearchResponse;
       setTotal(data.total);
-      setOffset(data.offset + data.limit);
-      setItems((prev) => (append ? [...prev, ...data.items] : data.items));
+      setCurrentOffset(data.offset);
+      setHasMoreResults(data.hasMore);
+      setItems(data.items);
       setHasSearched(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -95,12 +111,17 @@ export default function HomePage() {
 
   const onSubmit = () => {
     setItems([]);
-    setOffset(0);
-    runSearch(0, false);
+    setCurrentOffset(0);
+    setHasMoreResults(false);
+    runSearch(0);
   };
 
-  const onLoadMore = () => {
-    runSearch(offset, true);
+  const onNextPage = () => {
+    runSearch(currentOffset + PAGE_SIZE);
+  };
+
+  const onPreviousPage = () => {
+    runSearch(Math.max(0, currentOffset - PAGE_SIZE));
   };
 
   const onToggleFavorite = async (item: Listing) => {
@@ -158,11 +179,9 @@ export default function HomePage() {
     }
   };
 
-  const hasMore = items.length < total;
-
   return (
     <main className="min-h-screen bg-gradient-to-b from-stone-50 via-stone-50 to-stone-100 px-4 py-10">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
+      <div className="mx-auto flex w-full flex-col gap-8">
         <header className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="space-y-3">
@@ -174,61 +193,75 @@ export default function HomePage() {
               </h1>
               <p className="max-w-2xl text-sm text-stone-600">
                 Search eBay listings, filter by condition and price, and keep paging until you find
-                the perfect vintage find.
+                the perfect find.
               </p>
             </div>
             {supabaseEnabled ? (
               <AuthButton onUserChange={setUser} />
-            ) : (
-              <div className="text-xs text-stone-500">
-                Add Supabase env vars to enable login and favorites.
-              </div>
-            )}
+            ) : null}
           </div>
         </header>
 
-        <SearchForm values={values} onChange={setValues} onSubmit={onSubmit} loading={loading} />
+        <div className="grid gap-6 lg:grid-cols-[340px_minmax(0,1fr)] lg:items-start">
+          <aside className="order-1 lg:order-1 lg:sticky lg:top-2 lg:w-[340px]">
+            <SearchForm values={values} onChange={setValues} onSubmit={onSubmit} loading={loading} />
+          </aside>
+          <section className="order-2 space-y-6 lg:order-2">
+            {hasSearched && !loading && (
+              <div className="text-sm font-medium text-stone-600">Found {total} listings</div>
+            )}
 
-        {error && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+            {error && (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {error}
+              </div>
+            )}
 
-        {loading && !items.length && (
-          <div className="rounded-2xl bg-white/70 p-10 text-center text-sm text-stone-500">
-            Loading results...
-          </div>
-        )}
+            {loading && !items.length && (
+              <div className="rounded-2xl bg-white/70 p-10 text-center text-sm text-stone-500">
+                Loading results...
+              </div>
+            )}
 
-        {!loading && hasSearched && items.length > 0 && (
-          <ListingGrid
-            items={items}
-            canFavorite={Boolean(user) && supabaseEnabled}
-            favoriteIds={favoriteIds}
-            loadingFavoriteIds={loadingFavoriteIds}
-            onToggleFavorite={onToggleFavorite}
-          />
-        )}
+            {!loading && hasSearched && items.length > 0 && (
+              <ListingGrid
+                items={items}
+                canFavorite={Boolean(user) && supabaseEnabled}
+                favoriteIds={favoriteIds}
+                loadingFavoriteIds={loadingFavoriteIds}
+                onToggleFavorite={onToggleFavorite}
+              />
+            )}
 
-        {hasSearched && !items.length && !loading && !error && (
-          <div className="rounded-2xl border border-dashed border-stone-300 bg-white/70 p-10 text-center text-sm text-stone-500">
-            No listings found. Try widening your search.
-          </div>
-        )}
+            {hasSearched && !items.length && !loading && !error && (
+              <div className="rounded-2xl border border-dashed border-stone-300 bg-white/70 p-10 text-center text-sm text-stone-500">
+                No listings found. Try widening your search.
+              </div>
+            )}
+          </section>
+        </div>
 
         {hasSearched && items.length > 0 && (
           <div className="flex items-center justify-between">
             <div className="text-xs text-stone-500">
-              Showing {items.length} of {total} results
+              Page {Math.floor(currentOffset / PAGE_SIZE) + 1} · Showing {items.length} listings
             </div>
-            <button
-              onClick={onLoadMore}
-              disabled={!hasMore || loading}
-              className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 transition hover:border-stone-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Loading..." : hasMore ? "Load more" : "No more results"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onPreviousPage}
+                disabled={loading || currentOffset === 0}
+                className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 transition hover:border-stone-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <button
+                onClick={onNextPage}
+                disabled={loading || !hasMoreResults}
+                className="rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 transition hover:border-stone-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

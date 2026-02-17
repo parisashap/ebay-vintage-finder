@@ -5,6 +5,10 @@ export type Listing = {
   currency: string;
   condition: string;
   brand?: string;
+  size?: string;
+  color?: string;
+  material?: string;
+  createdAt?: string;
   vintageConfidence: number;
   shipping?: string;
   image?: string;
@@ -15,5 +19,6 @@ export type SearchResponse = {
   total: number;
   offset: number;
   limit: number;
+  hasMore: boolean;
   items: Listing[];
 };
