@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "eBay Vintage Finder",
+  title: "VintagEbay",
   description: "Search eBay for vintage clothing",
 };
 

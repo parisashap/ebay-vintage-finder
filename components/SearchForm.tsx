@@ -9,7 +9,7 @@ export type SearchFormValues = {
   size: string;
   color: string;
   material: string;
-  era: "" | "70s" | "80s" | "90s" | "y2k";
+  era: "" | "70s" | "80s" | "90s" | "y2k" | "2000s" | "2000";
   sortBy: "best_match" | "price_low" | "price_high" | "newest";
 };
 
@@ -193,6 +193,8 @@ export default function SearchForm({ values, onChange, onSubmit, loading }: Sear
               <option value="80s">80s</option>
               <option value="90s">90s</option>
               <option value="y2k">Y2K</option>
+              <option value="2000s">2000s</option>
+              <option value="2000">2000</option>
             </select>
           </div>
         </>

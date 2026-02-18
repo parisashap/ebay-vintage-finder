@@ -14,7 +14,9 @@ export async function GET(req: NextRequest) {
     const size = searchParams.get("size") ?? undefined;
     const color = searchParams.get("color") ?? undefined;
     const material = searchParams.get("material") ?? undefined;
-    const era = (searchParams.get("era") as "70s" | "80s" | "90s" | "y2k" | null) ?? undefined;
+    const era =
+      (searchParams.get("era") as "70s" | "80s" | "90s" | "y2k" | "2000s" | "2000" | null) ??
+      undefined;
     const sortBy =
       (searchParams.get("sortBy") as "best_match" | "price_low" | "price_high" | "newest" | null) ??
       undefined;

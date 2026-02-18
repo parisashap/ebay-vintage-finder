@@ -8,7 +8,7 @@ type SearchParams = {
   size?: string;
   color?: string;
   material?: string;
-  era?: "70s" | "80s" | "90s" | "y2k";
+  era?: "70s" | "80s" | "90s" | "y2k" | "2000s" | "2000";
   sortBy?: "best_match" | "price_low" | "price_high" | "newest";
   strictness?: "relaxed" | "balanced" | "strict";
   excludeTerms?: string[];
@@ -75,21 +75,23 @@ const CONDITION_MAP: Record<NonNullable<SearchParams["condition"]>, string> = {
 
 const VINTAGE_POSITIVE_TERMS = [
   "vintage",
+  "pre-owned",
   "made in usa",
   "single stitch",
   "80s",
   "90s",
   "70s",
   "2000s",
+  "2000",
   "y2k",
   "Y2k",
   "distressed",
+  "grunge",
   "faded",
-  "thrashed",
+  "babydoll",
 ];
 
 const VINTAGE_NEGATIVE_TERMS = [
-  "repro",
   "reproduction",
   "replica",
   "inspired",
@@ -111,7 +113,7 @@ const FAST_FASHION_BRANDS = new Set([
   "plt",
   "forever 21",
   "hm",
-  "h m",
+  "h&m",
   "zara",
   "bershka",
   "pull bear",
@@ -119,9 +121,10 @@ const FAST_FASHION_BRANDS = new Set([
   "primark",
   "new look",
   "missguided",
-  "asos design",
   "cotton on",
   "temu",
+  "asos",
+  "cider"
 ]);
 
 function getAuthHeader() {
@@ -397,8 +400,8 @@ function buildQueryVariants(params: SearchParams): string[] {
   const vintageBase = ensureVintageKeyword(baseKeyword);
   const base = ensureGenderKeyword(vintageBase, params.gender);
 
-  // Only do the two-search strategy when user selects Y2K era
-  if (params.era !== "y2k") return [base];
+  // Only do the two-search strategy for Y2K/2000 era selections.
+  if (params.era !== "y2k" && params.era !== "2000s" && params.era !== "2000") return [base];
 
   // If they already typed y2k/2000s, still run both variants for coverage
   const variants = new Set<string>();
@@ -520,6 +523,7 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
     if (params.era === "70s") return /70s|70's|1970|seventies/.test(haystack);
     if (params.era === "80s") return /80s|80's|1980|eighties/.test(haystack);
     if (params.era === "90s") return /90s|90's|1990|nineties/.test(haystack);
+    if (params.era === "2000") return /\b2000\b|y2k|2000s|00s/.test(haystack);
     return /y2k|2000|00s|2000s/.test(haystack);
   };
 

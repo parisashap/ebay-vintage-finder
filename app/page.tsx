@@ -185,10 +185,10 @@ export default function HomePage() {
         <header className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">
-                eBay Vintage Finder
+              <p className="text-4xl font-bold tracking-tight text-stone-900 md:text-5xl">
+                VintagEbay
               </p>
-              <h1 className="text-3xl font-semibold text-stone-900 md:text-4xl">
+              <h1 className="text-xl font-semibold text-stone-700 md:text-2xl">
                 Discover vintage pieces without the clutter.
               </h1>
               <p className="max-w-2xl text-sm text-stone-600">
