@@ -1,20 +1,80 @@
-## eBay Vintage Finder
+# eBay Vintage Finder
 
-Next.js app that searches eBay Browse API listings.
+Next.js app that searches eBay listings and ranks them by a custom `vintageConfidence` score (0-100).  
+Built for fast vintage discovery with practical filtering, ranking, and fallback behavior for unusual queries.
 
-## Supabase auth + favorites (easy MVP)
+## Core Logic
 
-1. Create a Supabase project and copy:
-- Project URL
-- Anon key
-- Service role key (server-only)
+### Vintage Confidence Percentage
+The percentage shown in the UI (`Vintage confidence: X%`) comes from `rankVintageConfidence` in `lib/ebay.ts`.
 
-2. Set env vars in Vercel and `.env.local`:
+Score starts at `50`, then:
+- `+12` if brand is present
+- `+10` if condition appears used / pre-owned
+- For each keyword token:
+- `+8` if token is found in title/brand text
+- `-6` if token is missing
+- `+12` if the full keyword phrase appears
+- `+6` per vintage-positive term hit (cap: 3 hits, max `+18`)
+- `-12` per vintage-negative term hit
+- Final score is clamped to `0..100`
+
+### Filtering and Ranking Pipeline
+The search flow in `searchEbay` (`lib/ebay.ts`) is:
+
+1. Fetch candidate listings from eBay (including query variants for Y2K/2000s coverage)
+2. Normalize and enrich item data (brand/attributes)
+3. Apply hard filters (blocked brands, explicit text filters, exclude terms)
+4. Apply staged vintage filtering:
+- `primary`: full filters and stricter confidence thresholds
+- `fallback`: relaxed era/gender + lower confidence threshold
+- `backup`: hard filters only, no confidence floor
+5. Rank results:
+- Fast fashion brands are pushed lower
+- Then apply selected sort:
+- `best_match`: highest confidence first, then lower price
+- `price_low`: lower price first, then confidence
+- `price_high`: higher price first, then confidence
+- `newest`: newest first, then confidence
+
+This staged fallback prevents zero-results for interesting or niche queries while keeping result quality logical.
+
+## Features
+
+- eBay Browse API search
+- Vintage confidence scoring
+- Era and gender-aware query expansion (Y2K/2000s support)
+- Strictness modes: `relaxed`, `balanced`, `strict`
+- Fast-fashion demotion in ranking
+- Supabase auth + favorites
+
+## Local Setup
+
+1. Install deps:
+```bash
+npm install
+```
+
+2. Configure `.env.local`:
+- `EBAY_CLIENT_ID`
+- `EBAY_CLIENT_SECRET`
+- `EBAY_ENV` (`sandbox` for sandbox credentials, else omit for production)
+- `EBAY_MARKETPLACE_ID` (optional, defaults to `EBAY_US`)
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (optional unless you add admin/server routes)
+- `SUPABASE_SERVICE_ROLE_KEY` (optional unless adding server admin routes)
 
-3. Run this SQL in Supabase SQL Editor:
+3. Run dev server:
+```bash
+npm run dev
+```
+
+4. Open:
+`http://localhost:3000`
+
+## Supabase Favorites Table
+
+Run in Supabase SQL Editor:
 
 ```sql
 create table if not exists favorites (
@@ -45,65 +105,28 @@ on favorites for delete
 using (auth.uid() = user_id);
 ```
 
-## Pre-deploy check (recommended)
+## Pre-Deploy Check
 
-Run this before pushing/deploying:
+Run before deploy:
 
 ```bash
 npm run preflight:vercel
 ```
 
-This check validates:
-- `NODE_ENV` is not a non-standard value.
-- Required env vars exist: `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`.
-- Sandbox credentials are paired with `EBAY_ENV=sandbox`.
-- Production build succeeds (`next build --webpack`).
+Checks:
+- Required eBay env vars are present
+- Sandbox credentials are paired with `EBAY_ENV=sandbox`
+- Production build succeeds
 
-## Vercel env vars
+## Deploy Notes (Vercel)
 
-Set these in Vercel Project Settings -> Environment Variables:
+Set in Vercel Project Settings -> Environment Variables:
 - `EBAY_CLIENT_ID`
 - `EBAY_CLIENT_SECRET`
-- `EBAY_ENV` (set to `sandbox` when using `-SBX-` credentials; otherwise leave unset for production)
-- `EBAY_MARKETPLACE_ID` (optional, default `EBAY_US`)
+- `EBAY_ENV`
+- `EBAY_MARKETPLACE_ID`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (if used)
 
-Do not set `NODE_ENV` manually in Vercel.
-
----
-
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Do not manually set `NODE_ENV` in Vercel.
