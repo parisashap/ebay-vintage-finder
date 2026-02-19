@@ -219,6 +219,13 @@ function isFastFashionBrand(brand?: string): boolean {
   return FAST_FASHION_BRANDS.has(normalizeBrand(brand));
 }
 
+function buildListingHaystack(item: Listing): string {
+  return [item.title, item.brand, item.size, item.color, item.material, item.condition]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
 function readAspectValues(item: EbayItemSummary, aspectNames: string[]): string[] {
   const lowerNames = new Set(aspectNames.map((name) => name.toLowerCase()));
   const aspects = Array.isArray(item.localizedAspects) ? item.localizedAspects : [];
@@ -512,7 +519,7 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
   const enrichedItems = await enrichMissingBrands(normalizedItems, token, marketplaceId);
 
   const strictness = params.strictness ?? "balanced";
-  const minConfidence = strictness === "relaxed" ? 30 : strictness === "strict" ? 65 : 45;
+  const minConfidence = strictness === "strict" ? 65 : strictness === "balanced" ? 45 : 0;
   const excludeTerms = (params.excludeTerms ?? []).map((term) => term.toLowerCase());
 
   const matchesText = (haystack: string, needle?: string) =>
@@ -533,31 +540,8 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
     return /\bwomen('?s)?\b|\bfemale\b|\blad(?:y|ies)\b/.test(haystack);
   };
 
-  const filteredItems = enrichedItems
-    .filter((item) => {
-      if (!isAllowedBrand(item.brand)) return false;
-
-      const haystack = [item.title, item.brand, item.size, item.color, item.material, item.condition]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      if (!matchesText(haystack, params.brand)) return false;
-      if (!matchesText(haystack, params.size)) return false;
-      if (!matchesText(haystack, params.color)) return false;
-      if (!matchesText(haystack, params.material)) return false;
-      if (!matchesEra(haystack)) return false;
-      if (!matchesGender(haystack)) return false;
-
-      if (excludeTerms.some((term) => haystack.includes(term))) return false;
-
-      if (strictness !== "relaxed" && item.vintageConfidence < minConfidence) return false;
-
-      if (strictness === "strict" && !isUsedCondition(item.condition)) return false;
-
-      return true;
-    })
-    .sort((a, b) => {
+  const sortListings = (items: Listing[]) =>
+    [...items].sort((a, b) => {
       const aFastFashion = isFastFashionBrand(a.brand);
       const bFastFashion = isFastFashionBrand(b.brand);
       if (aFastFashion !== bFastFashion) return aFastFashion ? 1 : -1;
@@ -573,11 +557,67 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
       return b.vintageConfidence - a.vintageConfidence || a.price - b.price;
     });
 
-  const items = filteredItems.slice(0, requestedLimit);
+  type FilterStage = {
+    minConfidence: number;
+    requireUsed: boolean;
+    enforceEra: boolean;
+    enforceGender: boolean;
+  };
+
+  const filterByStage = (stage: FilterStage): Listing[] =>
+    enrichedItems.filter((item) => {
+      if (!isAllowedBrand(item.brand)) return false;
+
+      const haystack = buildListingHaystack(item);
+      if (!matchesText(haystack, params.brand)) return false;
+      if (!matchesText(haystack, params.size)) return false;
+      if (!matchesText(haystack, params.color)) return false;
+      if (!matchesText(haystack, params.material)) return false;
+      if (excludeTerms.some((term) => haystack.includes(term))) return false;
+
+      if (stage.enforceEra && !matchesEra(haystack)) return false;
+      if (stage.enforceGender && !matchesGender(haystack)) return false;
+      if (stage.minConfidence > 0 && item.vintageConfidence < stage.minConfidence) return false;
+      if (stage.requireUsed && !isUsedCondition(item.condition)) return false;
+
+      return true;
+    });
+
+  const primaryStage: FilterStage = {
+    minConfidence,
+    requireUsed: strictness === "strict",
+    enforceEra: true,
+    enforceGender: true,
+  };
+  const fallbackStage: FilterStage = {
+    minConfidence: strictness === "strict" ? 55 : strictness === "balanced" ? 35 : 0,
+    requireUsed: false,
+    enforceEra: false,
+    enforceGender: false,
+  };
+  const backupStage: FilterStage = {
+    minConfidence: 0,
+    requireUsed: false,
+    enforceEra: false,
+    enforceGender: false,
+  };
+
+  const primaryItems = filterByStage(primaryStage);
+  const filteredItems =
+    primaryItems.length > 0
+      ? primaryItems
+      : (() => {
+          const fallbackItems = filterByStage(fallbackStage);
+          if (fallbackItems.length > 0) return fallbackItems;
+          return filterByStage(backupStage);
+        })();
+  const rankedItems = sortListings(filteredItems);
+
+  const items = rankedItems.slice(0, requestedLimit);
   const hasMore = items.length >= requestedLimit;
 
   return {
-    total: filteredItems.length,
+    total: rankedItems.length,
     offset: baseOffset, // no single "data" response anymore
     limit: params.limit ?? 24,
     hasMore,
