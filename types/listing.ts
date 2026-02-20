@@ -10,6 +10,8 @@ export type Listing = {
   material?: string;
   createdAt?: string;
   vintageConfidence: number;
+  availableQuantity?: number;
+  hasMultiSizeOffer?: boolean;
   shipping?: string;
   image?: string;
   url: string;

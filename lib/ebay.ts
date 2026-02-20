@@ -57,6 +57,7 @@ type EbayItemSummary = {
   thumbnailImages?: EbayImage[] | unknown;
   itemWebUrl?: unknown;
   itemCreationDate?: unknown;
+  estimatedAvailabilities?: unknown;
 };
 
 let tokenCache: TokenCache | null = null;
@@ -248,9 +249,42 @@ function firstAspectValue(item: EbayItemSummary, aspectNames: string[]): string 
   return values[0];
 }
 
+function readAvailableQuantity(item: EbayItemSummary): number | undefined {
+  const availabilities = Array.isArray(item.estimatedAvailabilities) ? item.estimatedAvailabilities : [];
+  for (const availability of availabilities) {
+    if (typeof availability !== "object" || availability === null) continue;
+    const raw = (availability as { estimatedAvailableQuantity?: unknown }).estimatedAvailableQuantity;
+    const quantity = Number(raw);
+    if (Number.isFinite(quantity) && quantity >= 0) return quantity;
+  }
+  return undefined;
+}
+
+function hasMultiSizeOffer(item: EbayItemSummary, title: string): boolean {
+  const sizeValues = readAspectValues(item, ["size", "size type"])
+    .map((value) => value.toLowerCase())
+    .filter(Boolean);
+  const distinctSizes = new Set(sizeValues);
+  if (distinctSizes.size > 1) return true;
+
+  const t = title.toLowerCase();
+  return (
+    /\bchoose (your )?size\b/.test(t) ||
+    /\bselect (your )?size\b/.test(t) ||
+    /\bsize(s)? available\b/.test(t) ||
+    /\bxs[-/ ]?xl\b/.test(t) ||
+    /\bone size does not fit all\b/.test(t)
+  );
+}
+
 function isUsedCondition(condition: string): boolean {
   const c = condition.toLowerCase();
   return c.includes("used") || c.includes("pre-owned") || c.includes("pre owned");
+}
+
+function isNewWithTags(condition: string): boolean {
+  const c = condition.toLowerCase();
+  return c.includes("new with tags") || c === "nwt" || c.includes("(nwt)");
 }
 
 function rankVintageConfidence(item: { title: string; brand?: string; condition: string }, keyword: string) {
@@ -296,7 +330,9 @@ function normalizeItem(item: EbayItemSummary, keyword: string): Listing {
   const size = firstAspectValue(item, ["size", "size type"]);
   const color = firstAspectValue(item, ["color"]);
   const material = firstAspectValue(item, ["material"]);
+  const availableQuantity = readAvailableQuantity(item);
   const title = typeof item.title === "string" ? item.title : "";
+  const multiSizeOffer = hasMultiSizeOffer(item, title);
   const vintageConfidence = rankVintageConfidence(
     {
       title,
@@ -318,6 +354,8 @@ function normalizeItem(item: EbayItemSummary, keyword: string): Listing {
     material,
     createdAt: typeof item.itemCreationDate === "string" ? item.itemCreationDate : undefined,
     vintageConfidence,
+    availableQuantity,
+    hasMultiSizeOffer: multiSizeOffer,
     shipping: typeof shippingCost === "string" || typeof shippingCost === "number" ? `$${shippingCost} shipping` : undefined,
     image:
       typeof item.image?.imageUrl === "string"
@@ -567,8 +605,12 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
   const filterByStage = (stage: FilterStage): Listing[] =>
     enrichedItems.filter((item) => {
       if (!isAllowedBrand(item.brand)) return false;
+      if (typeof item.availableQuantity === "number" && item.availableQuantity > 1) return false;
+      if (item.hasMultiSizeOffer) return false;
+      if (isNewWithTags(item.condition)) return false;
 
       const haystack = buildListingHaystack(item);
+      if (haystack.includes("new with tags") || /\bnwt\b/.test(haystack)) return false;
       if (!matchesText(haystack, params.brand)) return false;
       if (!matchesText(haystack, params.size)) return false;
       if (!matchesText(haystack, params.color)) return false;

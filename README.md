@@ -11,9 +11,7 @@ The percentage shown in the UI (`Vintage confidence: X%`) comes from `rankVintag
 Score starts at `50`, then:
 - `+12` if brand is present
 - `+10` if condition appears used / pre-owned
-- For each keyword token:
-- `+8` if token is found in title/brand text
-- `-6` if token is missing
+- For each keyword token, `+8` if found in title/brand text and `-6` if missing
 - `+12` if the full keyword phrase appears
 - `+6` per vintage-positive term hit (cap: 3 hits, max `+18`)
 - `-12` per vintage-negative term hit
@@ -24,7 +22,13 @@ The search flow in `searchEbay` (`lib/ebay.ts`) is:
 
 1. Fetch candidate listings from eBay (including query variants for Y2K/2000s coverage)
 2. Normalize and enrich item data (brand/attributes)
-3. Apply hard filters (blocked brands, explicit text filters, exclude terms)
+3. Apply hard filters:
+- blocked brands
+- explicit text filters (brand/size/color/material)
+- exclude terms
+- known multi-quantity listings (`availableQuantity > 1`)
+- multi-size offer style listings (multiple size options / "choose size" patterns)
+- `new with tags` / `NWT`
 4. Apply staged vintage filtering:
 - `primary`: full filters and stricter confidence thresholds
 - `fallback`: relaxed era/gender + lower confidence threshold
@@ -46,6 +50,7 @@ This staged fallback prevents zero-results for interesting or niche queries whil
 - Era and gender-aware query expansion (Y2K/2000s support)
 - Strictness modes: `relaxed`, `balanced`, `strict`
 - Fast-fashion demotion in ranking
+- Authenticity-focused hard gates for inventory-like listings (multi-quantity, multi-size, NWT)
 
 ## Local Setup
 

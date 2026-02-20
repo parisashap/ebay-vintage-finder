@@ -185,7 +185,7 @@ export default function HomePage() {
         <header className="space-y-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="space-y-3">
-              <p className="text-4xl font-bold tracking-tight text-stone-900 md:text-5xl">
+              <p className="market-sans-title text-4xl font-bold tracking-tight text-stone-900 md:text-5xl">
                 VintagEbay
               </p>
               <h1 className="text-xl font-semibold text-stone-700 md:text-2xl">
